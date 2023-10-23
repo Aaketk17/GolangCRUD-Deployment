@@ -1,11 +1,10 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
 
-	con "github.com/Aaketk17/GolangCRUD-Deployment/database"
+	routes "github.com/Aaketk17/GolangCRUD-Deployment/routes"
 	"github.com/gofiber/fiber/v2"
 	"github.com/joho/godotenv"
 )
@@ -19,10 +18,9 @@ func main() {
 	}
 
 	app := fiber.New()
-	app.Get("/home", func(c *fiber.Ctx) error {
-		_, err := con.Connection.Query(context.Background(), `select * from students`)
-		return err
 
-	})
+	// routes.BookRoutes(app)
+	routes.UserRoutes(app)
+
 	app.Listen(":" + os.Getenv("PORT"))
 }
