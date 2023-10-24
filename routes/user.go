@@ -9,7 +9,7 @@ import (
 func UserRoutes(userRoutes *fiber.App) {
 
 	userRoutes.Post("/signup", controller.UserSignUp)
-	// userRoutes.Post("/login", controller.UserLogin)
+	userRoutes.Post("/login", controller.UserLogin)
 
 	// userAuth := userRoutes.Group("/users", middleware.UserAuthMiddleware)
 	// userAuth.Get("/getuser:id", controller.GetUser)

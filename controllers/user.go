@@ -9,10 +9,66 @@ import (
 	helpers "github.com/Aaketk17/GolangCRUD-Deployment/helpers"
 	"github.com/Aaketk17/GolangCRUD-Deployment/models"
 	"github.com/gofiber/fiber/v2"
-	"github.com/jackc/pgx/v5"
 )
 
-// func UserLogin(c *fiber.Ctx) error {}
+func UserLogin(c *fiber.Ctx) error {
+	var user models.User
+
+	err := c.BodyParser(&user)
+	if err != nil {
+		return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{
+			"message": "Error in processing the data",
+			"error":   err,
+		})
+	}
+
+	userExist, userExistErr := isUserExist(*user.Email)
+
+	if userExistErr != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(&fiber.Map{
+			"message": "Error in finding user",
+			"error":   userExistErr,
+		})
+	}
+
+	if userExistErr == nil && !userExist {
+		return c.Status(fiber.StatusConflict).JSON(&fiber.Map{
+			"message": "User not found",
+			"error":   userExistErr,
+		})
+	}
+
+	userDetails, exist, userErr := findUserDetails(*user.Email)
+	if userDetails == nil && !exist && userErr != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(&fiber.Map{
+			"message": "Error in finding user",
+			"error":   userErr,
+		})
+	}
+
+	pwdValid, deError := helpers.VerifyPassword(*userDetails.Password, *user.Password)
+
+	if !pwdValid && deError != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(&fiber.Map{
+			"message": "Error in decrypting password",
+			"error":   deError,
+		})
+	}
+
+	accessToken, tokenErr := helpers.GenerateToken(*userDetails.Email, *userDetails.Name, *userDetails.UserID)
+	if tokenErr != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(&fiber.Map{
+			"message": "Error in creating access token",
+			"error":   tokenErr,
+		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(&fiber.Map{
+		"accessToken": accessToken,
+		"email":       *userDetails.Email,
+		"name":        *userDetails.Name,
+	})
+}
 
 func UserSignUp(c *fiber.Ctx) error {
 	var user models.User
@@ -26,7 +82,6 @@ func UserSignUp(c *fiber.Ctx) error {
 			"error":   err,
 		})
 	}
-	fmt.Println("Comming....1")
 
 	hashedPwd, hashErr := helpers.HashPassword(*user.Password)
 	if hashErr != nil {
@@ -35,19 +90,15 @@ func UserSignUp(c *fiber.Ctx) error {
 			"error":   hashErr,
 		})
 	}
-	fmt.Println("Comming....2")
 
 	userExist, userExistErr := isUserExist(*user.Email)
-	fmt.Println("Comming....3")
 
 	if userExistErr != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(&fiber.Map{
 			"message": "Error in validating user",
 			"error":   userExistErr,
 		})
-		// return userExistErr
 	}
-	fmt.Println("Comming....3")
 
 	if userExistErr == nil && userExist {
 		return c.Status(fiber.StatusConflict).JSON(&fiber.Map{
@@ -55,7 +106,6 @@ func UserSignUp(c *fiber.Ctx) error {
 			"error":   userExistErr,
 		})
 	}
-	fmt.Println("Comming....4")
 
 	_, insertError := conn.Connection.Exec(ctx, `insert into users (name, email, password, phone) values($1, $2, $3, $4)`, *user.Name, *user.Email, hashedPwd, *user.Phone)
 	if insertError != nil {
@@ -70,30 +120,51 @@ func UserSignUp(c *fiber.Ctx) error {
 	})
 }
 
-func isUserExist(email string) (bool, error) {
-	// ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-	// defer cancel()
-	fmt.Println("Comming....43", email)
+func isUserExist(userEmail string) (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
 
-	rows, queryErr := conn.Connection.Query(context.Background(), "select * from users where email=$1", email)
-	if queryErr != nil {
-		fmt.Println("1", queryErr)
-		return true, queryErr
+	rows, selectErr := conn.Connection.Query(ctx, "select user_id from users where email=$1", userEmail)
+	if selectErr != nil {
+		return true, selectErr
 	}
 
-	numbers, collectErr := pgx.CollectRows(rows, pgx.RowTo[int32])
-	fmt.Println("1000", rows)
+	var users []models.User
 
-	if collectErr != nil {
-		fmt.Println("2", collectErr)
-		return true, collectErr
+	for rows.Next() {
+		var user models.User
+		err := rows.Scan(&user.UserID)
+		if err != nil {
+			return true, err
+		}
+		users = append(users, user)
 	}
 
-	if len(numbers) > 0 {
+	if len(users) > 0 {
 		return true, nil
 	} else {
 		return false, nil
 	}
+}
+
+func findUserDetails(userEmail string) (*models.User, bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	rows, selectErr := conn.Connection.Query(ctx, "select name, email, password, phone, user_id, book_id from users where email=$1", userEmail)
+	if selectErr != nil {
+		return nil, false, selectErr
+	}
+
+	var user models.User
+
+	for rows.Next() {
+		err := rows.Scan(&user.Name, &user.Email, &user.Password, &user.Phone, &user.UserID, &user.BookID)
+		if err != nil {
+			return nil, false, err
+		}
+	}
+	return &user, true, nil
 }
 
 // func GetUser(c *fiber.Ctx) error {}

@@ -17,4 +17,12 @@ func HashPassword(pwd string) (string, error) {
 	return string(hashValue), nil
 }
 
-// func DecryptPassword(hashPwd string) string {}
+func VerifyPassword(hashedPwd string, oriPwd string) (bool, error) {
+	err := bcrypt.CompareHashAndPassword([]byte(hashedPwd), []byte(oriPwd))
+	if err != nil {
+		log.Fatal(err)
+		fmt.Println("Error in decoding the password")
+		return false, err
+	}
+	return true, nil
+}
