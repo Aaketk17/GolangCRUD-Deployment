@@ -34,7 +34,7 @@ func PGConnection() *pgx.Conn {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
-	pgConnString := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=postgres", host, portInt, user, password)
+	pgConnString := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s", host, portInt, user, password, dbname)
 	fmt.Println(pgConnString)
 
 	pgConn, err := pgx.Connect(ctx, pgConnString)
