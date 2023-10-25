@@ -7,6 +7,7 @@ type User struct {
 	Phone    *string `json:"phone"`
 	BookID   *int    `json:"book_id"`
 	UserID   *int    `json:"user_id"`
+	UserType *string `json:"user_type" validate:"oneof=ADMIN USER admin user"`
 }
 
 type Book struct {

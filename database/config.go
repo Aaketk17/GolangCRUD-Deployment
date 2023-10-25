@@ -35,7 +35,6 @@ func PGConnection() *pgx.Conn {
 	defer cancel()
 
 	pgConnString := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s", host, portInt, user, password, dbname)
-	fmt.Println(pgConnString)
 
 	pgConn, err := pgx.Connect(ctx, pgConnString)
 	if err != nil {
