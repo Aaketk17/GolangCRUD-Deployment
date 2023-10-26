@@ -64,6 +64,16 @@ func UserLogin(c *fiber.Ctx) error {
 		})
 	}
 
+	tokenCookie := new(fiber.Cookie)
+	tokenCookie.Name = "accessToken"
+	tokenCookie.Value = accessToken
+	tokenCookie.HTTPOnly = true
+	tokenCookie.Secure = true
+	tokenCookie.Expires = time.Now().Add(24 * time.Hour)
+	tokenCookie.SameSite = "Strict"
+
+	c.Cookie(tokenCookie)
+
 	return c.Status(fiber.StatusOK).JSON(&fiber.Map{
 		"accessToken": accessToken,
 		"email":       *userDetails.Email,
@@ -149,7 +159,7 @@ func isUserExist(userEmail string) (bool, error) {
 
 	rows, selectErr := conn.Connection.Query(ctx, "select user_id from users where email=$1", userEmail)
 	if selectErr != nil {
-		return true, selectErr
+		return false, selectErr
 	}
 
 	var users []models.User
@@ -158,7 +168,7 @@ func isUserExist(userEmail string) (bool, error) {
 		var user models.User
 		err := rows.Scan(&user.UserID)
 		if err != nil {
-			return true, err
+			return false, err
 		}
 		users = append(users, user)
 	}
@@ -190,7 +200,22 @@ func findUserDetails(userEmail string) (*models.User, bool, error) {
 	return &user, true, nil
 }
 
-// func AddAdminUser() error {}
+func AddAdminUser(c *fiber.Ctx) error {
+
+	type tokenFromCookie struct {
+		Value string `cookie:"accessToken"`
+	}
+	t := new(tokenFromCookie)
+	cookieErr := c.CookieParser(t)
+	if cookieErr != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(&fiber.Map{
+			"message": "Error in getting token from cookies",
+			"error":   cookieErr,
+		})
+	}
+
+	return nil
+}
 
 // func GetUser(c *fiber.Ctx) error {}
 

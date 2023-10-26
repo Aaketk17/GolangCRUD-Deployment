@@ -34,3 +34,27 @@ func GenerateToken(email string, name string, user_id int) (string, error) {
 
 	return token, nil
 }
+
+func ValidateToken(signedToken string) (claims *UserClaims, msg string) {
+	var SECRET_KEY string = os.Getenv("SECRET_KEY")
+	token, err := jwt.ParseWithClaims(
+		signedToken,
+		&UserClaims{},
+		func(token *jwt.Token) (interface{}, error) {
+			return []byte(SECRET_KEY), nil
+		},
+	)
+	if err != nil {
+		msg = err.Error()
+		return
+	}
+
+	claims, ok := token.Claims.(*UserClaims)
+	if !ok {
+		msg = "Token is not valid"
+		msg = err.Error()
+		return
+	}
+	return claims, msg
+
+}
