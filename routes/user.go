@@ -18,6 +18,6 @@ func UserRoutes(userRoutes *fiber.App) {
 	userAuth.Get("/getuser/:id", controller.GetUser)
 	userAuth.Get("/getusers", controller.GetUsers)
 	userAuth.Delete("/delete/:id", controller.DeleteUser)
-	// userAuth.Post("/logout:id", controller.Logout)
-	// userAuth.Put("/update:id", controller.UpdateUsers)
+	userAuth.Put("/update/:id", controller.UpdateUsers)
+	userAuth.Post("/logout", controller.Logout)
 }

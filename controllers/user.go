@@ -15,6 +15,11 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+type updateValues struct {
+	Name  *string `json:"name"`
+	Phone *string `json:"phone"`
+}
+
 func UserLogin(c *fiber.Ctx) error {
 	var user models.User
 
@@ -525,12 +530,116 @@ func invalidateToken(tokenString string, c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNoContent).JSON(&fiber.Map{
 			"message": "User sucessfully logged out",
 		})
-
 	}
 
 	return nil
 }
 
-// func UpdateUsers(c *fiber.Ctx) error {}
+func UpdateUsers(c *fiber.Ctx) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
 
-// func Logout(c *fiber.Ctx) error {}
+	userId := c.Params("id")
+	userIdInt, err := strconv.Atoi(userId)
+
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(&fiber.Map{
+			"message": "Error in converting string to Int - userId",
+			"error":   err.Error(),
+		})
+	}
+
+	token, tokenErr := helpers.GetTokenFromCookies(c)
+	if tokenErr != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(&fiber.Map{
+			"message": "Error in getting token from cookies",
+			"error":   tokenErr,
+		})
+	}
+
+	claims, errMsg, valid := helpers.GetTokenClaims(token)
+	if !valid {
+		return c.Status(fiber.StatusInternalServerError).JSON(&fiber.Map{
+			"message": errMsg,
+		})
+	}
+
+	if claims.UserType == "USER" && claims.UserID != userIdInt {
+		return c.Status(fiber.StatusUnauthorized).JSON(&fiber.Map{
+			"error": "Normal users can't update other user's account",
+		})
+	}
+
+	var updateValues updateValues
+
+	bodyErr := c.BodyParser(&updateValues)
+	if bodyErr != nil {
+		return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{
+			"message": "Error in processing the payload",
+			"error":   err,
+		})
+	}
+
+	if updateValues.Name == nil && updateValues.Phone == nil {
+		return c.Status(fiber.StatusUnprocessableEntity).JSON(&fiber.Map{
+			"message": "No values given to update the user",
+		})
+	}
+
+	if updateValues.Name != nil && updateValues.Phone == nil {
+		_, updateErr := conn.Connection.Exec(ctx, `update users set name=$1 where user_id=$2`, *updateValues.Name, userIdInt)
+		if updateErr != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(&fiber.Map{
+				"message": "Error in updating users table",
+				"error":   updateErr,
+			})
+		}
+	}
+
+	if updateValues.Name == nil && updateValues.Phone != nil {
+		_, updateErr := conn.Connection.Exec(ctx, `update users set phone=$1 where user_id=$2`, *updateValues.Phone, userIdInt)
+		if updateErr != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(&fiber.Map{
+				"message": "Error in updating users table",
+				"error":   updateErr,
+			})
+		}
+	}
+
+	if updateValues.Name != nil && updateValues.Phone != nil {
+		_, updateErr := conn.Connection.Exec(ctx, `update users set name=$1, phone=$2 where user_id=$3`, *updateValues.Name, *updateValues.Phone, userIdInt)
+		if updateErr != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(&fiber.Map{
+				"message": "Error in updating users table",
+				"error":   updateErr,
+			})
+		}
+	}
+
+	return c.Status(fiber.StatusNoContent).JSON(&fiber.Map{
+		"message": fmt.Sprintf("User with user_id %s updated successfully", userId),
+	})
+}
+
+func Logout(c *fiber.Ctx) error {
+	token, tokenErr := helpers.GetTokenFromCookies(c)
+	if tokenErr != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(&fiber.Map{
+			"message": "Error in getting token from cookies",
+			"error":   tokenErr,
+		})
+	}
+
+	claims, errMsg, valid := helpers.GetTokenClaims(token)
+	if !valid {
+		return c.Status(fiber.StatusInternalServerError).JSON(&fiber.Map{
+			"message": errMsg,
+		})
+	}
+
+	invalidateToken(token, c)
+
+	return c.Status(fiber.StatusOK).JSON(&fiber.Map{
+		"message": fmt.Sprintf("User %s signed out successfully", claims.Name),
+	})
+}
