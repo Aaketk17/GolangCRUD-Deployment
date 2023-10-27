@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"os"
 	"strconv"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/Aaketk17/GolangCRUD-Deployment/models"
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 func UserLogin(c *fiber.Ctx) error {
@@ -352,7 +354,6 @@ func GetUser(c *fiber.Ctx) error {
 	}
 
 	userDetails, userExists, userErr := findUserDetailsByUserId(userIdParamsInt)
-	fmt.Println(userExists, "ererer", userErr)
 	if !userExists && userErr != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(&fiber.Map{
 			"message": fmt.Sprintf("Error in finding user by userid %s", userId),
@@ -426,8 +427,110 @@ func GetUsers(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(usersData)
 }
 
-// func UpdateUsers(c *fiber.Ctx) error {}
+func DeleteUser(c *fiber.Ctx) error {
+	userId := c.Params("id")
+	userIdInt, err := strconv.Atoi(userId)
 
-// func DeleteUser(c *fiber.Ctx) error {}
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(&fiber.Map{
+			"message": "Error in converting string to Int - userId",
+			"error":   err.Error(),
+		})
+	}
+
+	token, tokenErr := helpers.GetTokenFromCookies(c)
+	if tokenErr != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(&fiber.Map{
+			"message": "Error in getting token from cookies",
+			"error":   tokenErr,
+		})
+	}
+
+	claims, errMsg, valid := helpers.GetTokenClaims(token)
+	if !valid {
+		return c.Status(fiber.StatusInternalServerError).JSON(&fiber.Map{
+			"message": errMsg,
+		})
+	}
+
+	if claims.UserType == "USER" && claims.UserID != userIdInt {
+		return c.Status(fiber.StatusUnauthorized).JSON(&fiber.Map{
+			"error": "Normal users can't delete any user account",
+		})
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	commandTag, err := conn.Connection.Exec(ctx, "delete from users where user_id=$1", userIdInt)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(&fiber.Map{
+			"message": "Error in deleting the user with userId " + userId,
+			"error":   err.Error(),
+		})
+	}
+
+	if commandTag.RowsAffected() != 1 {
+		return c.Status(fiber.StatusInternalServerError).JSON(&fiber.Map{
+			"message": "No user found with userId" + userId,
+		})
+	}
+
+	if claims.UserID == userIdInt {
+		invalidateToken(token, c)
+	}
+
+	return c.Status(fiber.StatusNoContent).JSON(&fiber.Map{
+		"message": "User with userId" + userId + "deleted",
+	})
+}
+
+func invalidateToken(tokenString string, c *fiber.Ctx) error {
+	var SECRET_KEY string = os.Getenv("JWT_SECRET")
+	token, err := jwt.Parse(
+		tokenString,
+		func(token *jwt.Token) (interface{}, error) {
+			return []byte(SECRET_KEY), nil
+		},
+	)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(&fiber.Map{
+			"message": "Error in parsing the given token string",
+			"error":   err,
+		})
+	}
+
+	tokenCookie := new(fiber.Cookie)
+	tokenCookie.Name = "accessToken"
+	tokenCookie.Value = tokenString
+	tokenCookie.HTTPOnly = true
+	tokenCookie.Secure = true
+	tokenCookie.Expires = time.Now().Add(-time.Hour)
+	tokenCookie.SameSite = "Strict"
+	c.Cookie(tokenCookie)
+
+	if token.Valid {
+		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+		defer cancel()
+
+		updatedTime := time.Now().String()
+		_, insertError := conn.Connection.Exec(ctx, `insert into invalidtokens (token, updated_at) values($1, $2)`, tokenString, updatedTime)
+		if insertError != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(&fiber.Map{
+				"message": "Error in adding invalid token to invalidtokens table",
+				"error":   insertError,
+			})
+		}
+
+		return c.Status(fiber.StatusNoContent).JSON(&fiber.Map{
+			"message": "User sucessfully logged out",
+		})
+
+	}
+
+	return nil
+}
+
+// func UpdateUsers(c *fiber.Ctx) error {}
 
 // func Logout(c *fiber.Ctx) error {}
