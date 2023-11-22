@@ -34,6 +34,7 @@ CREATE TABLE users (
 - Pull the postgres docker image ```docker pull postgres```
 - create a docker newtork ```docker network create golangdemo-network```
 - Run the postgres docker image ```docker run --name pgsql --network golangdemo-network  -e POSTGRES_PASSWORD=golangDemo -p 5432:5432 -d postgres```
+- Connect with pgAdmin host=localhost, password=golangDemo, username=postgres
 - Create the users and invalidTokens as given above
 - Pull the application docker image ```docker pull aaketk/golang-demo```
 - Run the application docker image 
